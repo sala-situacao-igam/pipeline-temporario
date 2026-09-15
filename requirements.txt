@@ -1,0 +1,8 @@
+pandas
+numpy
+requests
+lxml
+google-auth
+google-api-python-client
+pyarrow
+matplotlib
