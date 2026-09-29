@@ -18,15 +18,30 @@ Uso:
     from indicador_meteorologia import gerar_html_meteorologia
     from nav_site import injetar_nav
 
-    gerar_html_2_2(df_pontuacao, "index.html")
+    gerar_html_2_2(fato_disponibilidade, dim_estacao, "index.html")
     injetar_nav("index.html", "hidrometria")
 
     gerar_html_meteorologia(r_4_1, r_4_3, "meteorologia.html")
     injetar_nav("meteorologia.html", "meteorologia")
+
+CORRIGIDO (15/09/2026): a busca da tag <body> usava a string literal
+"<body>". A versão atual de indicador_2_2_html.py gera
+`<body class="viz-root">` (a classe viz-root, que antes ficava numa <div>
+interna, foi movida para o próprio <body>) -- com a checagem antiga isso
+derrubava a Fase 5 do pipeline diário (rodar_diario_hidro.py) com "Process
+completed with exit code 1" logo depois do log "HTML de Hidrometria
+gerado em: ...", porque injetar_nav() levantava ValueError ("não parece um
+HTML completo") sem esse erro ser capturado em nenhum lugar acima. Trocado
+para regex (aceita <body>, <body class="..."> ou qualquer outro atributo).
+indicador_meteorologia.py continua gerando <body> puro (a classe fica numa
+<div> interna), então meteorologia.html nunca foi afetado -- só o
+dashboard de hidrometria.
 """
 
+import re
+
 NAV_HTML = """<nav class="nav-site">
-  <a href="hidrometria.html" data-pagina="hidrometria">Hidrometria</a>
+  <a href="hidrometria.html" data-pagina="hidrometria">Hidrologia</a>
   <a href="meteorologia.html" data-pagina="meteorologia">Meteorologia</a>
 </nav>
 """
@@ -67,11 +82,16 @@ def injetar_nav(caminho_html, pagina_atual):
     Idempotente: se chamado duas vezes no mesmo arquivo, insere duas vezes
     -- rode sempre a partir do HTML recém-gerado (não num arquivo que já
     passou por aqui antes), como no exemplo de uso no topo do arquivo.
+
+    A tag <body> é localizada por regex (aceita `<body>`, `<body class="...">`,
+    ou qualquer outro atributo) -- diferentes geradores de HTML do pipeline
+    usam formas diferentes da tag.
     """
     with open(caminho_html, "r", encoding="utf-8") as f:
         conteudo = f.read()
 
-    if "</head>" not in conteudo or "<body>" not in conteudo:
+    match_body = re.search(r"<body\b[^>]*>", conteudo)
+    if "</head>" not in conteudo or not match_body:
         raise ValueError(
             f"{caminho_html} não parece um HTML completo (falta <head>/<body>) -- "
             "confirme que é a saída de gerar_html_2_2()/gerar_html_meteorologia()."
@@ -79,7 +99,9 @@ def injetar_nav(caminho_html, pagina_atual):
 
     css = NAV_CSS_TEMPLATE.format(pagina_atual=pagina_atual)
     conteudo = conteudo.replace("</head>", css + "</head>", 1)
-    conteudo = conteudo.replace("<body>", "<body>\n" + NAV_HTML, 1)
+
+    tag_body = match_body.group(0)
+    conteudo = conteudo.replace(tag_body, tag_body + "\n" + NAV_HTML, 1)
 
     with open(caminho_html, "w", encoding="utf-8") as f:
         f.write(conteudo)

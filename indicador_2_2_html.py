@@ -124,11 +124,13 @@ def gerar_html_2_2_dual(fato_disponibilidade, dim_estacao, caminho_saida=None, c
     distrib_cota = distribuicao_pontuacao(df_cota)
     media_cota = media_geral(df_cota)
     media_pct_cota = media_percentual_geral(df_cota)
-    
+    total_cota = len(df_cota)
+
     # Gráfico CHUVA
     distrib_chuva = distribuicao_pontuacao(df_chuva)
     media_chuva = media_geral(df_chuva)
     media_pct_chuva = media_percentual_geral(df_chuva)
+    total_chuva = len(df_chuva)
     
     # ========================================================================
     # GERAÇÃO DO HTML (com dados separados em JSON)
@@ -165,7 +167,7 @@ def gerar_html_2_2_dual(fato_disponibilidade, dim_estacao, caminho_saida=None, c
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Hidrometria — Indicadores 2.1 e 2.2</title>
+<title>Hidrologia — Indicadores 2.1 e 2.2</title>
 <style>
   .viz-root {{
     color-scheme: light;
@@ -228,6 +230,24 @@ def gerar_html_2_2_dual(fato_disponibilidade, dim_estacao, caminho_saida=None, c
   .hero-valor--compacto {{ font-size: 2.2rem; }}
   .hero-valor--compacto small {{ font-size: 1rem; }}
 
+  /* CORRIGIDO (15/09/2026): estas regras existiam no <style> da versão
+     anterior de indicador_2_2_html.py (antes da reescrita pro gráfico
+     dual cota/chuva) e sumiram na reescrita -- sem elas, o cartão do
+     indicador 2.1 (gerado por indicador_2_1_html.py e injetado aqui via
+     cartao_2_1_html) perde o contexto de altura do flex container: as
+     barras (<span class="barra-vert-coluna" style="height:NN%">) ficam
+     com height em % de um pai sem altura definida, então colapsam pra
+     invisíveis -- o HTML/JS continua correto, só a barra some
+     visualmente. Foi assim que o gráfico do 2.1 "desapareceu" no site
+     publicado assim que esta página passou a publicar com sucesso
+     (antes disso, o pipeline estava quebrando na Fase 5 por outro motivo
+     -- ver nav_site.py -- e o site continuava servindo a versão antiga,
+     que ainda tinha este CSS). */
+  .hero-valor {{ font-size: 3rem; font-weight: 600; line-height: 1; }}
+  .hero-valor small {{ font-size: 1.2rem; color: var(--text-muted); font-weight: 400; }}
+  .hero-secundario {{ font-size: 0.8rem; color: var(--text-secondary); margin: 8px 0 0; }}
+  .hero-secundario .valor-secundario {{ color: var(--text-muted); }}
+
   .grid-duas-colunas {{
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -236,6 +256,25 @@ def gerar_html_2_2_dual(fato_disponibilidade, dim_estacao, caminho_saida=None, c
   @media (max-width: 640px) {{
     .grid-duas-colunas {{ grid-template-columns: 1fr; }}
   }}
+
+  .grafico-barras-vertical {{
+    display: flex;
+    align-items: flex-end;
+    gap: 14px;
+    padding: 0 4px;
+  }}
+  .barra-vert-item {{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    flex: 1;
+    height: 100%;
+  }}
+  .barra-vert-valor {{ font-size: 0.8rem; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; font-variant-numeric: tabular-nums; }}
+  .barra-vert-coluna {{ display: block; width: 60%; min-width: 18px; border-radius: 4px 4px 0 0; min-height: 2px; }}
+  .barra-vert-rotulo {{ font-size: 0.75rem; color: var(--text-secondary); margin-top: 8px; text-align: center; }}
+  .legenda-grafico {{ font-size: 0.78rem; color: var(--text-secondary); margin: 10px 0 0; }}
 
   .grade-tiles {{ display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }}
   .tile-status {{
@@ -287,77 +326,97 @@ def gerar_html_2_2_dual(fato_disponibilidade, dim_estacao, caminho_saida=None, c
     font-size: 0.9rem;
   }}
 
-  .lista-estacoes {{
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin: 18px 0;
-  }}
+  /* RESTAURADO (15/09/2026, a pedido do usuário): o layout de linha/barra
+     por estação abaixo (grid enxuto, trilha de 14px com marcações de
+     limiar, tooltip no hover) e a legenda de cores logo depois são os
+     mesmos usados na versão anterior à reescrita para o gráfico dual
+     cota/chuva -- o usuário não gostou do visual "cartão com borda" que a
+     reescrita introduziu (trilha de 28px sem marcações, sem tooltip, sem
+     legenda) e pediu para manter o visual antigo mesmo com os dois
+     gráficos separados. */
+  .lista-estacoes {{ display: flex; flex-direction: column; }}
   .linha-estacao {{
-    display: flex;
+    display: grid;
+    grid-template-columns: 190px 1fr 110px;
     align-items: center;
     gap: 12px;
-    padding: 10px 12px;
-    border: 1px solid var(--border);
+    padding: 6px 4px;
     border-radius: 6px;
-    background: var(--surface-1);
-    cursor: pointer;
-    transition: background 0.15s ease, border-color 0.15s ease;
+    position: relative;
   }}
-  .linha-estacao:hover {{
+  .linha-estacao:hover, .linha-estacao:focus {{
     background: var(--gridline);
-    border-color: var(--baseline);
+    outline: none;
   }}
-  .rotulo-estacao {{
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    flex: 0 0 140px;
-    min-width: 0;
-  }}
+  .rotulo-estacao {{ display: flex; flex-direction: column; overflow: hidden; }}
   .rotulo-principal {{
-    font-size: 0.9rem;
-    font-weight: 500;
-    color: var(--text-primary);
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
   }}
   .rotulo-secundario {{
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     color: var(--text-muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
   }}
   .trilha-barra {{
-    display: flex;
-    align-items: center;
-    flex: 1;
-    min-width: 0;
-    height: 28px;
-    background: var(--gridline);
+    display: block;
+    height: 14px;
     border-radius: 4px;
-    padding: 0 6px;
+    position: relative;
+    /* Marcações finas nos limiares oficiais da tabela de pontuação (70/80/
+       90/95%), pra dar noção de distância até a próxima faixa -- some por
+       baixo da barra colorida quando a estação já passou daquele ponto. */
+    background:
+      linear-gradient(to right, transparent 69.6%, var(--baseline) 69.6%, var(--baseline) 70.4%, transparent 70.4%),
+      linear-gradient(to right, transparent 79.6%, var(--baseline) 79.6%, var(--baseline) 80.4%, transparent 80.4%),
+      linear-gradient(to right, transparent 89.6%, var(--baseline) 89.6%, var(--baseline) 90.4%, transparent 90.4%),
+      linear-gradient(to right, transparent 94.6%, var(--baseline) 94.6%, var(--baseline) 95.4%, transparent 95.4%),
+      var(--gridline);
   }}
   .barra {{
     display: block;
-    height: 100%;
-    border-radius: 2px;
-    transition: width 0.3s ease;
+    height: 14px;
+    border-radius: 4px;
+    min-width: 3px;
   }}
   .valor-barra {{
-    flex: 0 0 auto;
-    margin-left: 8px;
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: var(--text-primary);
+    font-size: 0.82rem;
+    font-weight: 600;
+    text-align: right;
     font-variant-numeric: tabular-nums;
   }}
-  .valor-secundario {{
-    color: var(--text-muted);
-    margin-left: 4px;
+  .valor-secundario {{ font-weight: 400; color: var(--text-muted); }}
+
+  .linha-estacao::after {{
+    content: attr(data-tooltip);
+    position: absolute;
+    right: 0;
+    top: -30px;
+    background: var(--text-primary);
+    color: var(--surface-1);
+    padding: 5px 9px;
+    border-radius: 5px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.1s ease;
+    z-index: 2;
+    max-width: 90vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }}
+  .linha-estacao:hover::after, .linha-estacao:focus::after {{
+    opacity: 1;
+  }}
+
+  .legenda-titulo {{ font-size: 0.82rem; font-weight: 600; color: var(--text-secondary); margin: 0 0 8px; }}
+  .legenda {{ display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; font-size: 0.82rem; color: var(--text-secondary); }}
+  .legenda span {{ display: inline-flex; align-items: center; gap: 5px; }}
 
   .contador-estacoes {{
     font-size: 0.85rem;
@@ -435,8 +494,8 @@ def gerar_html_2_2_dual(fato_disponibilidade, dim_estacao, caminho_saida=None, c
   {cartao_2_1_html}
 
   <div class="cartao">
-    <h2>Disponibilidade de dados (Indicador 2.2)</h2>
-    <p class="subtitulo-cartao">Variáveis monitoradas: cota, chuva e vazão</p>
+    <h2>2.2 — Disponibilidade de dados</h2>
+    <p class="subtitulo-cartao">Variáveis monitoradas: cota e chuva</p>
 
     <!-- Seletor de tipo de gráfico -->
     <div style="margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border);">
@@ -450,27 +509,28 @@ def gerar_html_2_2_dual(fato_disponibilidade, dim_estacao, caminho_saida=None, c
         </button>
       </div>
       <p style="font-size: 0.8rem; color: var(--text-muted); margin: 10px 0 0; line-height: 1.4;">
-        Cada gráfico mostra as 68 estações com seus próprios dados e cálculos de disponibilidade.
         O filtro "Variável usada" (abaixo) mostra quais estações coletam cada tipo de dado.
       </p>
     </div>
 
     <!-- ===== GRÁFICO COTA ===== -->
     <div id="grafico-cota" class="grafico-container ativo">
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
-        <div>
-          <div class="hero-label">Pontuação média</div>
-          <div class="hero-valor--compacto" id="media-pontuacao-cota">{media_cota:.2f}</div>
-        </div>
-        <div>
-          <div class="hero-label">Disponibilidade média</div>
-          <div class="hero-valor--compacto" id="media-percentual-cota">{media_pct_cota:.2f}<small>%</small></div>
-        </div>
-      </div>
+      <p class="hero-label">Pontuação média geral ({total_cota} estações)</p>
+      <div class="hero-valor"><span id="media-pontuacao-cota">{media_cota}</span> <small>/ 10</small></div>
+      <p class="hero-secundario">percentual médio geral: <span class="valor-secundario"><span id="media-percentual-cota">{str(media_pct_cota).replace(".", ",")}</span>%</span></p>
 
       <h3 style="margin: 20px 0 12px; font-size: 0.95rem;">Distribuição por faixa</h3>
       <div class="grade-tiles" id="tiles-cota">
         {tiles_html_cota}
+      </div>
+
+      <p class="legenda-titulo">Disponibilidade de dados:</p>
+      <div class="legenda">
+        <span><strong style="color:#0ca30c;">&#10003;</strong> Ótima (10): 95%–100%</span>
+        <span><strong style="color:#52c90de5;">&#10003;</strong> Muito Boa (9): 90%–94,99%</span>
+        <span><strong style="color:#fab219;">&#9679;</strong> Boa (8): 80–89,99%</span>
+        <span><strong style="color:#ec835a;">&#9650;</strong> Regular (7): 70–79,99%</span>
+        <span><strong style="color:#d03b3b;">&#10007;</strong> Reprovada (0): abaixo de 70%</span>
       </div>
 
       <h3 style="margin: 20px 0 12px; font-size: 0.95rem;">Filtros e visualização</h3>
@@ -514,20 +574,22 @@ def gerar_html_2_2_dual(fato_disponibilidade, dim_estacao, caminho_saida=None, c
 
     <!-- ===== GRÁFICO CHUVA ===== -->
     <div id="grafico-chuva" class="grafico-container">
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
-        <div>
-          <div class="hero-label">Pontuação média</div>
-          <div class="hero-valor--compacto" id="media-pontuacao-chuva">{media_chuva:.2f}</div>
-        </div>
-        <div>
-          <div class="hero-label">Disponibilidade média</div>
-          <div class="hero-valor--compacto" id="media-percentual-chuva">{media_pct_chuva:.2f}<small>%</small></div>
-        </div>
-      </div>
+      <p class="hero-label">Pontuação média geral ({total_chuva} estações)</p>
+      <div class="hero-valor"><span id="media-pontuacao-chuva">{media_chuva}</span> <small>/ 10</small></div>
+      <p class="hero-secundario">percentual médio geral: <span class="valor-secundario"><span id="media-percentual-chuva">{str(media_pct_chuva).replace(".", ",")}</span>%</span></p>
 
       <h3 style="margin: 20px 0 12px; font-size: 0.95rem;">Distribuição por faixa</h3>
       <div class="grade-tiles" id="tiles-chuva">
         {tiles_html_chuva}
+      </div>
+
+      <p class="legenda-titulo">Disponibilidade de dados:</p>
+      <div class="legenda">
+        <span><strong style="color:#0ca30c;">&#10003;</strong> Ótima (10): 95%–100%</span>
+        <span><strong style="color:#52c90de5;">&#10003;</strong> Muito Boa (9): 90%–94,99%</span>
+        <span><strong style="color:#fab219;">&#9679;</strong> Boa (8): 80–89,99%</span>
+        <span><strong style="color:#ec835a;">&#9650;</strong> Regular (7): 70–79,99%</span>
+        <span><strong style="color:#d03b3b;">&#10007;</strong> Reprovada (0): abaixo de 70%</span>
       </div>
 
       <h3 style="margin: 20px 0 12px; font-size: 0.95rem;">Filtros e visualização</h3>
@@ -580,8 +642,6 @@ def gerar_html_2_2_dual(fato_disponibilidade, dim_estacao, caminho_saida=None, c
     9: "#52c90de5",
     10: "#0ca30c",
   }};
-  var LARGURA_MAX_PX = 280;
-  
   // DADOS SEPARADOS (SEM DUPLICAÇÃO)
   var DADOS_COTA = {dados_json_cota};
   var DADOS_CHUVA = {dados_json_chuva};
@@ -679,7 +739,15 @@ def gerar_html_2_2_dual(fato_disponibilidade, dim_estacao, caminho_saida=None, c
     trilha.className = "trilha-barra";
     var barra = document.createElement("span");
     barra.className = "barra";
-    barra.style.width = Math.max(3, Math.round((dado.percentual_medio / 100) * LARGURA_MAX_PX)) + "px";
+    // CORRIGIDO (16/09/2026): a largura da barra era calculada como pixels
+    // fixos (percentual/100 * um "LARGURA_MAX_PX" arbitrário), então o
+    // preenchimento não representava a % real dentro da trilha -- a trilha
+    // (.trilha-barra) é a coluna "1fr" do grid e ocupa a largura real
+    // disponível na tela, que quase sempre é bem maior que aquele valor
+    // fixo. Agora a barra usa width em % (do próprio percentual_medio),
+    // relativa à trilha -- assim 98,82% preenche mesmo 98,82% da trilha,
+    // não uma fração arbitrária dela.
+    barra.style.width = Math.max(1, Math.min(100, dado.percentual_medio)) + "%";
     barra.style.background = CORES[dado.pontuacao];
     trilha.appendChild(barra);
 
@@ -949,49 +1017,36 @@ def gerar_html_2_2_dual(fato_disponibilidade, dim_estacao, caminho_saida=None, c
         print(f"HTML de Hidrometria gerado em: {caminho_saida}")
 
 
-def gerar_html_2_2(df_pontuacao, caminho_saida, cartao_2_1_html=""):
-    """Função compatível com o pipeline existente.
-    
-    Recebe um DataFrame de pontuação (como antes) e o converte internamente
-    em dois gráficos (cota e chuva) para usar a função gerar_html_2_2_dual.
-    
+def gerar_html_2_2(fato_disponibilidade, dim_estacao, caminho_saida, cartao_2_1_html=""):
+    """Atalho de conveniência para quem já tem fato_disponibilidade e
+    dim_estacao carregados (rodar_diario_hidro.gerar_dashboard() e
+    gerar_relatorios_visuais.py) -- delega inteiramente para
+    gerar_html_2_2_dual, que calcula cota e chuva internamente.
+
+    CORRIGIDO (15/09/2026): a versão anterior recebia um DataFrame de
+    pontuação já calculado (df_pontuacao) e o ignorava -- em vez disso,
+    reconectava sozinha no Drive com um nome de arquivo de chave fixo
+    ("chave_servico.json", ignorando CAMINHO_CHAVE_JSON) e, se isso
+    falhasse por qualquer motivo, tentava adivinhar fato_disponibilidade/
+    dim_estacao via sys._getframe() no escopo de quem chamou. Isso
+    funcionava por coincidência de nomes de variável, fazia leituras
+    duplicadas no Drive a cada rodada e escondia qualquer erro real atrás
+    de um "except:" genérico. Agora a função só repassa os DataFrames que
+    o pipeline já carregou -- sem reconexão, sem adivinhação de escopo.
+
     Para usar:
-        gerar_html_2_2(df_pontuacao, "index.html", cartao_2_1_html=cartao_html)
-    
-    Internamente, ela:
-    1. Carrega os dados novamente (necessário para ter os dois gráficos separados)
-    2. Chama gerar_html_2_2_dual com os dados brutos
-    3. Salva em arquivo
-    
+        gerar_html_2_2(fato_disponibilidade, dim_estacao, "index.html", cartao_2_1_html=cartao_html)
+
     Args:
-        df_pontuacao: DataFrame de pontuação (pode ser ignorado, mantido por compatibilidade)
-        caminho_saida: path onde salvar o HTML
-        cartao_2_1_html: HTML do indicador 2.1 para incluir acima
+        fato_disponibilidade: DataFrame com dados de disponibilidade (mesmo
+            formato que calcular_pontuacao_2_2/calcular_pontuacao_2_2_chuva esperam).
+        dim_estacao: DataFrame com a dimensão de estações (mesmo formato).
+        caminho_saida: path onde salvar o HTML.
+        cartao_2_1_html: (opcional) HTML do indicador 2.1 para incluir acima.
     """
-    # Aviso: esta função espera que fato_disponibilidade e dim_estacao
-    # estejam disponíveis no escopo global (como estão em gerar_relatorios_visuais.py)
-    # Se não estiverem, você precisa chamar gerar_html_2_2_dual() diretamente
-    
-    import drive_io
-    import config
-    
-    try:
-        # Tentar carregar os dados do Drive (se estiver rodando via pipeline)
-        servico = drive_io.conectar_drive("chave_servico.json")
-        fato_disponibilidade = drive_io.ler_csv(servico, "fato_disponibilidade.csv", config.PASTA_RELATORIOS_ID)
-        dim_estacao = drive_io.ler_csv(servico, "dim_estacao.csv", config.PASTA_RELATORIOS_ID)
-    except:
-        # Se não conseguir carregar do Drive, assumir que foram passados globalmente
-        # (como em gerar_relatorios_visuais.py)
-        import sys
-        frame = sys._getframe(1)
-        fato_disponibilidade = frame.f_locals.get("fato_disponibilidade")
-        dim_estacao = frame.f_locals.get("dim_estacao")
-    
-    # Chamar a função dual que gera o HTML com dois gráficos
     gerar_html_2_2_dual(
         fato_disponibilidade,
         dim_estacao,
         caminho_saida=caminho_saida,
-        cartao_2_1_html=cartao_2_1_html
+        cartao_2_1_html=cartao_2_1_html,
     )

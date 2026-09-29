@@ -6,11 +6,10 @@ este módulo.
 Quando a estação tem cota, a pontuação usa só cota (vazão
 fica de fora por enquanto); quando é só-pluviométrica, usa chuva.
 
-Agora também calcula a pontuação em paralelo para CHUVA (quando
-disponível), permitindo visualizar duas perspectivas distintas:
-- Gráfico de disponibilidade de COTA
-- Gráfico de disponibilidade de CHUVA
-Esses dois gráficos são independentes e não se misturam.
+ADICIONADO (15/09/2026): também calcula a pontuação em paralelo para CHUVA
+(calcular_pontuacao_2_2_chuva), para TODAS as estações -- permite ao
+indicador 2.2 mostrar dois gráficos separados (cota e chuva) na mesma
+página, sem misturar os dois cálculos.
 
 Conexões do Pipeline:
 - Entradas: fato_disponibilidade.csv e dim_estacao.csv
@@ -21,10 +20,8 @@ Conexões do Pipeline:
 
 Funções:
 - pontuar_percentual: converte um percentual de disponibilidade na pontuação 0-10 do Anexo II.
-- calcular_pontuacao_2_2: calcula a pontuação por estação (COTA), usando tem_cota para decidir
-  qual variável usar. Retorna apenas estações com tem_cota=True.
-- calcular_pontuacao_2_2_chuva: calcula a pontuação usando APENAS chuva para TODAS as 68 estações,
-  independente de tem_cota. Inclui pluviométricas puras E fluviométricas.
+- calcular_pontuacao_2_2: calcula a pontuação por estação usando cota, cruzando fato_disponibilidade com dim_estacao. CORRIGIDO (23/09/2026): devolve apenas estações com tem_cota=True -- estação só-pluviométrica não entra mais aqui (antes entrava usando o percentual de chuva).
+- calcular_pontuacao_2_2_chuva: calcula a pontuação usando só chuva, para todas as estações -- usado pelo segundo gráfico (chuva) do indicador 2.2.
 - distribuicao_pontuacao: conta quantas estações caem em cada faixa de pontuação.
 - media_geral: calcula a pontuação média geral (0-10) entre as estações.
 - media_percentual_geral: calcula o percentual médio geral de disponibilidade (0-100%).
@@ -82,17 +79,18 @@ def calcular_pontuacao_2_2(fato_disponibilidade, dim_estacao):
     de início de operação, percentual médio no período todo, pontuação
     oficial (0-10) e ranking (1 = melhor estação).
 
-    dim_estacao decide, por estação, se ela usa cota ou chuva (via
-    tem_cota) e qual o ano_inicio_operacao -- atributos de estação, não do
-    fato diário.
-    
-    COMPORTAMENTO ATUAL (legado):
-    - Estações com tem_cota=True → usam cota
-    - Estações com tem_cota=False → usam chuva
-    - Gráfico reflete apenas essas variáveis selecionadas por estação."""
+    dim_estacao decide, por estação, se ela entra no cálculo (via tem_cota)
+    e qual o ano_inicio_operacao -- atributos de estação, não do fato
+    diário.
+
+    CORRIGIDO (23/09/2026): estações com tem_cota=False (só
+    pluviométricas) são puladas e não aparecem no resultado -- antes elas
+    entravam usando o percentual de chuva (disponibilidade_chuva_percentual)
+    como se fosse o dado de cota, o que inflava o universo do gráfico de
+    cota com estações que não medem essa variável. Para o dado de chuva
+    dessas estações, use calcular_pontuacao_2_2_chuva()."""
     colunas_fato_necessarias = [
-        "codigo_estacao", "data_dia",
-        "disponibilidade_chuva_percentual", "disponibilidade_cota_percentual",
+        "codigo_estacao", "data_dia", "disponibilidade_cota_percentual",
     ]
     faltantes_fato = [c for c in colunas_fato_necessarias if c not in fato_disponibilidade.columns]
     if faltantes_fato:
@@ -137,12 +135,18 @@ def calcular_pontuacao_2_2(fato_disponibilidade, dim_estacao):
     linhas = []
     for codigo, grupo in df.groupby("codigo_estacao"):
         tem_cota = bool(dim.loc[codigo, "tem_cota"])
-        variavel = "cota" if tem_cota else "chuva"
-        coluna_percentual = (
-            "disponibilidade_cota_percentual" if tem_cota else "disponibilidade_chuva_percentual"
-        )
+        if not tem_cota:
+            # CORRIGIDO (23/09/2026): estação sem cota (só pluviométrica)
+            # NÃO entra no indicador de cota. Antes, ela ainda aparecia
+            # aqui usando o percentual de CHUVA (variavel_usada="chuva"),
+            # o que misturava as duas variáveis dentro do mesmo gráfico de
+            # "Disponibilidade de dados (Cota)" e inflava o universo de
+            # estações avaliadas com estações que não medem cota nenhuma.
+            # Quem quiser o dado de chuva dessas estações usa
+            # calcular_pontuacao_2_2_chuva(), que já cobre todas.
+            continue
 
-        percentual_medio = round(grupo[coluna_percentual].mean(), 2)
+        percentual_medio = round(grupo["disponibilidade_cota_percentual"].mean(), 2)
         pontuacao = pontuar_percentual(percentual_medio)
 
         ano_inicio = dim.loc[codigo, "ano_inicio_operacao"]
@@ -150,7 +154,7 @@ def calcular_pontuacao_2_2(fato_disponibilidade, dim_estacao):
         linhas.append(
             {
                 "codigo_estacao": codigo,
-                "variavel_usada": variavel,
+                "variavel_usada": "cota",
                 "ano_inicio_operacao": int(ano_inicio) if pd.notna(ano_inicio) else None,
                 "percentual_medio": percentual_medio,
                 "pontuacao": pontuacao,
@@ -169,17 +173,18 @@ def calcular_pontuacao_2_2(fato_disponibilidade, dim_estacao):
 
 def calcular_pontuacao_2_2_chuva(fato_disponibilidade, dim_estacao):
     """Calcula a pontuação usando APENAS a variável CHUVA, para TODAS as
-    estações (68), independente de tem_cota. Isso inclui:
+    estações, independente de tem_cota. Isso inclui:
     - Estações pluviométricas puras (tem_cota=False)
     - Estações fluviométricas que também coletam chuva (tem_cota=True)
-    
-    Retorna um DataFrame com mesma estrutura de calcular_pontuacao_2_2, 
+
+    Retorna um DataFrame com mesma estrutura de calcular_pontuacao_2_2,
     mas com variavel_usada='chuva' para todos.
-    
-    Usar este quando quiser ver um gráfico separado de disponibilidade de
-    CHUVA, distinto do gráfico de COTA. O gráfico de chuva mostra as 68
-    estações em sua totalidade.
-    
+
+    ADICIONADO (15/09/2026): usado por indicador_2_2_html.gerar_html_2_2_dual
+    para gerar o segundo gráfico (disponibilidade de chuva), separado do
+    gráfico de cota. Função apenas ADITIVA -- calcular_pontuacao_2_2 (cota)
+    acima não foi alterada.
+
     Devolve um DataFrame pronto para ordenação/ranking por pontuação."""
     colunas_fato_necessarias = [
         "codigo_estacao", "data_dia",
@@ -223,7 +228,7 @@ def calcular_pontuacao_2_2_chuva(fato_disponibilidade, dim_estacao):
     for codigo, grupo in df.groupby("codigo_estacao"):
         percentual_medio = round(grupo["disponibilidade_chuva_percentual"].mean(), 2)
         pontuacao = pontuar_percentual(percentual_medio)
-        
+
         # Pega ano_inicio_operacao da dimensão (aplicável a todas as estações)
         ano_inicio = dim.loc[codigo, "ano_inicio_operacao"]
 

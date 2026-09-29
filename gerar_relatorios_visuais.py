@@ -74,6 +74,10 @@ dim_estacao = drive_io.ler_csv(servico, "dim_estacao.csv", config.PASTA_RELATORI
 df_pontuacao = calcular_pontuacao_2_2(fato_disponibilidade, dim_estacao)
 
 exportar_barras_faixa_2_2(df_pontuacao, "indicador_2_2_barras_faixa.png")
+# df_pontuacao continua sendo usado só para o PNG (exportar_barras_faixa_2_2)
+# acima -- gerar_html_2_2 (logo abaixo) recebe fato_disponibilidade e
+# dim_estacao diretamente, porque delega para gerar_html_2_2_dual, que
+# calcula cota e chuva separadamente por dentro.
 
 # -- indicador 2.1: mesma pagina do 2.2, mas entra ACIMA dele --
 estacoes_64 = carregar_universo_64(servico)
@@ -93,7 +97,7 @@ periodo_texto = f"Período considerado: {data_min:%d/%m/%Y} a {data_max:%d/%m/%Y
 exportar_comparacao_2_1(resultado_64, resultado_44, periodo_texto, "indicador_2_1_comparacao_64_44.png")
 cartao_2_1_html = gerar_cartao_2_1_html(resultado_64, resultado_44, periodo_texto)
 
-gerar_html_2_2(df_pontuacao, "index.html", cartao_2_1_html=cartao_2_1_html)
+gerar_html_2_2(fato_disponibilidade, dim_estacao, "index.html", cartao_2_1_html=cartao_2_1_html)
 injetar_nav("index.html", "hidrometria")
 
 print("PASSO 2 concluido: 2 PNGs (2.1 + 2.2) + index.html (2.1 acima do 2.2) gerados.\n")
