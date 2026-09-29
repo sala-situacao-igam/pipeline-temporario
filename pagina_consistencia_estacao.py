@@ -168,6 +168,30 @@ $('station').onchange=reset;$('variable').onchange=fillStations;const datesChang
 """
 
 
+def _epoch_ms(serie_data_hora):
+    """Milissegundos desde 1970-01-01 (o formato que o Date do JavaScript
+    espera), INDEPENDENTE da resolucao interna do pandas.
+
+    Correcao de 29/09/2026: a versao anterior fazia
+    .astype("int64") // 10**6, que so da certo quando a coluna esta em
+    nanossegundos (datetime64[ns], padrao do pandas 1.x/2.x). No pandas 3
+    (instalado pelo GitHub Actions, porque o requirements.txt nao fixa
+    versao), pd.to_datetime devolve datetime64[us] -- o int64 vira
+    MICROssegundos, a divisao por 10**6 entrega SEGUNDOS, e o navegador,
+    lendo segundos como milissegundos, desenha tudo em jan/1970.
+    Subtrair a epoca e dividir por um Timedelta de 1 ms da o mesmo
+    resultado em qualquer resolucao/versao."""
+    dt = pd.to_datetime(serie_data_hora)
+    ms = (dt - pd.Timestamp("1970-01-01")) // pd.Timedelta(milliseconds=1)
+    # Trava de seguranca: dado do Contrato de Gestao nunca e anterior a 2000.
+    # Se aparecer, e erro de conversao -- melhor falhar na rodada do que
+    # publicar a pagina com datas de 1970 de novo.
+    minimo = (pd.Timestamp("2000-01-01") - pd.Timestamp("1970-01-01")) // pd.Timedelta(milliseconds=1)
+    if len(ms) and int(ms.min()) < minimo:
+        raise ValueError(f"data_hora convertida para antes de 2000 (min={dt.min()}) -- conferir a conversao de datas.")
+    return ms.astype("int64")
+
+
 def _preparar_serie_chuva(fato_estacao):
     """[[timestamp_ms, chuva_mm, aprovado(0/1)], ...] -- so as leituras
     com chuva preenchida (mesmo criterio de "dado coletado" do 2.8)."""
@@ -176,7 +200,7 @@ def _preparar_serie_chuva(fato_estacao):
     d = fato_estacao.dropna(subset=["chuva"])
     if d.empty:
         return []
-    ts = pd.to_datetime(d["data_hora"]).astype("int64") // 10**6
+    ts = _epoch_ms(d["data_hora"])
     aprovado = (d["status_chuva"] == "aprovado").astype(int)
     return list(zip(ts.tolist(), d["chuva"].round(4).tolist(), aprovado.tolist()))
 
@@ -189,7 +213,7 @@ def _preparar_serie_nivel(fato_estacao):
     d = fato_estacao.dropna(subset=["nivel"])
     if d.empty:
         return []
-    ts = pd.to_datetime(d["data_hora"]).astype("int64") // 10**6
+    ts = _epoch_ms(d["data_hora"])
     range_ok = (d["status_nivel_range"] == "aprovado").astype(int)
     persist_ok = (d["status_nivel_persist"] == "aprovado").astype(int)
     return list(zip(ts.tolist(), d["nivel"].round(4).tolist(), range_ok.tolist(), persist_ok.tolist()))
