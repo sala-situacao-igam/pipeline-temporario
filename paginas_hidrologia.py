@@ -21,7 +21,8 @@ no período continuam (0%, reprovadas) e são listadas abaixo do ranking;
 no 2.1, o gráfico mostra as estações que enviaram pacotes (número
 recalculado a cada rodada); seção do 2.8 + MERGE (satélite, desde 28/09/2026 -- era CHIRPS).
 
-Funções: gerar_hidro_serie(...), gerar_hidro_cg(...).
+Funções: gerar_hidro_serie(...), gerar_hidro_cg(...) -- esta última devolve também o
+`dados` com devolver_dados=True (usado pelos gráficos do relatório).
 """
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -150,7 +151,7 @@ def _bloco_2_8(resumo):
 
     def barra(medida, com_nota):
         linha = r.loc[medida]
-        item = {"rotulo": linha["rotulo"], "aprovado": int(linha["aprovados"]),
+        item = {"chave": medida, "rotulo": linha["rotulo"], "aprovado": int(linha["aprovados"]),
                 "reprovado": int(linha["reprovados"]), "base": int(linha["avaliados"])}
         if com_nota and pd.notna(linha["nota"]):
             item["nota"] = int(linha["nota"])
@@ -168,6 +169,11 @@ def _bloco_2_8(resumo):
         "resultado da consistência (aprovadas ou reprovadas). Leituras em branco não são dado coletado "
         "(já cobradas no 2.2); não consistidas são as leituras com valor que não puderam ser testadas.",
     ]}
+    # Extras usados só pelos gráficos do relatório (gerar_relatorios_visuais.py) -- o layout ignora.
+    ind_2_8["n_estacoes_chuva"], ind_2_8["n_estacoes_nivel"] = n_ch, n_nv
+    if "chuva_cd" in r.index:  # leituras com valor (coletadas) x todas as leituras esperadas da base
+        ind_2_8["disponibilidade_chuva"] = {"coletadas": int(r.loc["chuva_cd", "avaliados"]),
+                                            "esperadas": int(r.loc["chuva", "avaliados"])}
 
     def kpi(id_, rotulo, medida_cd, medida_antiga):
         if medida_cd in r.index:  # regra atual (27/09): dados consistidos
@@ -209,7 +215,7 @@ def gerar_hidro_serie(fato_disponibilidade, dim_estacao, df_pacotes, caminho_sai
     dados = {
         "titulo": "Hidrologia — Série histórica",
         "periodo": f"Período: {_fmt(fato['data_dia'].min())} a {_fmt(fato['data_dia'].max())}",
-        "atualizado_em": _fmt(_hoje()), "avisos": avisos,
+        "atualizado_em": datetime.now(FUSO_BRASIL).strftime("%d/%m/%Y às %H:%M"), "avisos": avisos,
         "kpis": ([kpi_21] if kpi_21 else []) + kpis_22,
         "ind_2_1": ind_2_1 or _cartao_2_1_vazio(), "ind_2_2": ind_2_2,
     }
@@ -219,12 +225,15 @@ def gerar_hidro_serie(fato_disponibilidade, dim_estacao, df_pacotes, caminho_sai
 
 
 def gerar_hidro_cg(fato_disponibilidade, dim_estacao, df_pacotes, resumo_2_8, caminho_saida,
-                   data_fim=None, por_estacao_2_8=None):
+                   data_fim=None, por_estacao_2_8=None, devolver_dados=False):
     """Contrato de Gestão. Decisão de 27/09 (revista): no 2.1 e no 2.2 saem
     SÓ as estações do estacoes_excluidas.csv. Estações instaladas que não
     mandaram nada no período CONTINUAM no cálculo (0% -> reprovadas) e
     aparecem na lista "sem nenhum dado no período" abaixo do ranking.
-    `por_estacao_2_8` não é mais usado (mantido na assinatura por compatibilidade)."""
+    `por_estacao_2_8` não é mais usado (mantido na assinatura por compatibilidade).
+    `devolver_dados=True` (29/09/2026) devolve (resumo, dados) -- o `dados` é
+    o que gerar_relatorios_visuais.py desenha nos gráficos do relatório,
+    para que relatório e dashboard mostrem sempre os mesmos números."""
     data_fim = data_fim or _hoje()
     fato = _preparar_fato(fato_disponibilidade)
     fato_cg = fato[(fato["data_dia"] >= pd.Timestamp(config_cg.DATA_INICIO_CG_HIDRO))
@@ -256,4 +265,5 @@ def gerar_hidro_cg(fato_disponibilidade, dim_estacao, df_pacotes, resumo_2_8, ca
     }
     layout_cg.gerar_pagina_hidro(dados, caminho_saida)
     _finalizar(caminho_saida, "cg")
-    return {k["id"]: f"{k['percentual']:.1f}% -> nota {k['nota']}" for k in dados["kpis"]}
+    resumo = {k["id"]: f"{k['percentual']:.1f}% -> nota {k['nota']}" for k in dados["kpis"]}
+    return (resumo, dados) if devolver_dados else resumo

@@ -3,6 +3,10 @@ Descrição: ponto de entrada da execução diária de METEOROLOGIA via GitHub
 Actions (pipeline_diario_meteoro.yml) -- extrai os indicadores 4.1, 4.2 e
 4.3 do SIMGE e gera as DUAS páginas de Meteorologia no novo layout.
 
+ATUALIZADO (29/09/2026): depois da página do Contrato de Gestão, gera os
+PNGs do relatório mensal (4.1, 4.2, 4.3 -- gerar_relatorios_visuais.py) e
+os SOBRESCREVE na pasta do Drive config_cg.PASTA_GRAFICOS_RELATORIO_ID.
+
 ATUALIZADO (27/09/2026 -- Contrato de Gestão + novo layout):
     meteorologia.html     -> visão "2026" (mesmo cálculo de antes)
     meteorologia_cg.html  -> visão "Contrato de Gestão" (desde 16/09/2026,
@@ -57,11 +61,23 @@ def gerar_meteorologia(caminho_chave, pasta_site):
                         "indicador_4_2_alertas_2026.csv", config.PASTA_ALERTAS_METEOROLOGICOS_ID)
 
     # -- visão Contrato de Gestão --
+    dados_cg = None
     try:
-        print(meteorologia_cg.gerar_meteo_cg(os.path.join(pasta_site, config_cg.PAGINA_METEO_CG)))
+        resumo_cg, dados_cg = meteorologia_cg.gerar_meteo_cg(
+            os.path.join(pasta_site, config_cg.PAGINA_METEO_CG), devolver_dados=True)
+        print(resumo_cg)
     except Exception as erro:  # noqa: BLE001 -- a visão 2026 já foi gerada e segue publicada
         print(f"ERRO na página do Contrato de Gestão ({type(erro).__name__}: {erro}) -- "
               "a página 2026 será publicada mesmo assim.")
+
+    # Gráficos do relatório mensal (29/09/2026) -- mesmo `dados` da página do
+    # Contrato de Gestão, sobrescritos no Drive a cada rodada. Falha só avisa.
+    if dados_cg is not None:
+        try:
+            import gerar_relatorios_visuais
+            gerar_relatorios_visuais.gerar_e_publicar_meteo(dados_cg, servico)
+        except Exception as erro:  # noqa: BLE001
+            print(f"AVISO: gráficos do relatório (meteo) não atualizados ({type(erro).__name__}: {erro}).")
 
 
 def main():

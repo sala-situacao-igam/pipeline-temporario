@@ -110,6 +110,16 @@ URLS_SIMGE_POR_ANO = {
 # O desconto de feriados continua só na visão 2026 (funções originais).
 
 # ---------------------------------------------------------------------
+# Gráficos do relatório mensal (gerar_relatorios_visuais.py, 29/09/2026)
+# ---------------------------------------------------------------------
+# Pasta do Drive onde os PNGs do relatório são SOBRESCRITOS a cada rodada
+# (hidro: 2.1/2.2/2.8; meteo: 4.1/4.2/4.3). É a mesma pasta para onde a
+# célula de gráficos do Colab (graficos_indicadores.ipynb) enviava os PNGs.
+# Para trocar sem mexer no código: variável de ambiente
+# PASTA_GRAFICOS_RELATORIO_ID no workflow.
+PASTA_GRAFICOS_RELATORIO_ID = "1C6k6gsoKquJ41VfTM-Ae5t8hzBTsxCan"
+
+# ---------------------------------------------------------------------
 # Páginas do site
 # ---------------------------------------------------------------------
 PAGINA_HIDRO_SERIE = "hidrometria.html"

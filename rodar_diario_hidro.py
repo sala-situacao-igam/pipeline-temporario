@@ -5,6 +5,12 @@ Frente 1), ingestão incremental (API nova -- Detalhada, indicador 2.1),
 pipeline de consistência (disponibilidade 2.2 + indicador 2.8) e geração
 das DUAS páginas de Hidrologia, em sequência.
 
+ATUALIZADO (29/09/2026 -- gráficos do relatório mensal):
+- Depois da página do Contrato de Gestão, a Fase 5 gera os PNGs do
+  relatório (2.1, 2.2, 2.8 -- gerar_relatorios_visuais.py) com os mesmos
+  números da página e SOBRESCREVE os arquivos na pasta do Drive
+  config_cg.PASTA_GRAFICOS_RELATORIO_ID. Falha nos gráficos só gera aviso.
+
 ATUALIZADO (29/09/2026 -- aba "Consistência por Estação"):
 - Fase 5 agora gera TRÊS páginas (paginas_hidrologia.py +
   pagina_consistencia_estacao.py):
@@ -115,13 +121,25 @@ def gerar_paginas(caminho_chave, pasta_site, resultados_consistencia=None):
 
     os.makedirs(pasta_site, exist_ok=True)
     print(paginas_hidrologia.gerar_hidro_serie(fato, dim, pacotes, os.path.join(pasta_site, config_cg.PAGINA_HIDRO_SERIE)))
+    dados_cg = None
     try:
-        print(paginas_hidrologia.gerar_hidro_cg(fato, dim, pacotes, resumo,
-                                                os.path.join(pasta_site, config_cg.PAGINA_HIDRO_CG),
-                                                por_estacao_2_8=por_estacao))
+        resumo_cg, dados_cg = paginas_hidrologia.gerar_hidro_cg(
+            fato, dim, pacotes, resumo, os.path.join(pasta_site, config_cg.PAGINA_HIDRO_CG),
+            por_estacao_2_8=por_estacao, devolver_dados=True)
+        print(resumo_cg)
     except Exception as erro:  # noqa: BLE001 -- a Série histórica já foi gerada e segue publicada
         print(f"ERRO na página do Contrato de Gestão ({type(erro).__name__}: {erro}) -- "
               "a Série histórica será publicada mesmo assim.")
+
+    # Gráficos do relatório mensal (29/09/2026): desenhados a partir do MESMO
+    # `dados` da página do Contrato de Gestão e sobrescritos no Drive a cada
+    # rodada. Uma falha aqui só gera aviso -- nunca impede a publicação.
+    if dados_cg is not None:
+        try:
+            import gerar_relatorios_visuais
+            gerar_relatorios_visuais.gerar_e_publicar_hidro(dados_cg, servico)
+        except Exception as erro:  # noqa: BLE001
+            print(f"AVISO: gráficos do relatório (hidro) não atualizados ({type(erro).__name__}: {erro}).")
     try:
         pagina_consistencia_estacao.gerar_pagina_consistencia(
             fato_estacao, dim, os.path.join(pasta_site, config_cg.PAGINA_HIDRO_CONSISTENCIA))

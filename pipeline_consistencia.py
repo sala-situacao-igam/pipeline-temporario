@@ -109,7 +109,14 @@ def rodar_para_todas_estacoes(caminho_chave_json, inicio=0, limite=None, salvar_
     print("Preparando o indicador 2.8...")
     import config_cg
     config_cg.carregar_exclusoes_do_drive(servico)
-    dim = ind28.preparar_dim(drive_io.ler_csv(servico, "dim_estacao.csv", config.PASTA_RELATORIOS_ID))
+    dim_bruto = drive_io.ler_csv(servico, "dim_estacao.csv", config.PASTA_RELATORIOS_ID)
+    if dim_bruto is None:  # 30/09/2026: mensagem clara em vez de "'NoneType' object has no attribute 'copy'"
+        raise RuntimeError(
+            "dim_estacao.csv NÃO foi encontrado na pasta de relatórios do Drive "
+            f"(config.PASTA_RELATORIOS_ID = {config.PASTA_RELATORIOS_ID}). Confira se o arquivo não foi "
+            "apagado, movido, renomeado (ex.: 'dim_estacao (1).csv') ou mandado para a lixeira, e se a "
+            "conta de serviço ainda tem acesso a essa pasta.")
+    dim = ind28.preparar_dim(dim_bruto)
     df_min_max = ind28.carregar_valores_min_max(servico)
     df_regiao = dim[["codigo_estacao", "regiao"]] if "regiao" in dim.columns else None
     if df_regiao is None:

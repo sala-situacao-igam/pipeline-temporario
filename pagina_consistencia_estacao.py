@@ -46,25 +46,77 @@ Conexoes do Pipeline:
 import json
 import os
 
+import html as _html
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 import pandas as pd
 
+import config_cg
+import layout_cg
 import nav_cg
 import nav_site
 
 NOME_PASTA_DADOS = "dados_consistencia"
 LIMIAR_CHUVA_MM = 1000  # mesmo limite de "valor impossivel" do 2.8 -- acima disso a barra some do grafico
 
-CABECALHO_HTML = """<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Monitoramento hidrológico</title>
-<style>
-*{box-sizing:border-box}body{margin:0;background:#f2f5f8;color:#192e43;font:15px system-ui,sans-serif}main{max-width:1440px;margin:auto;padding:30px}h1{margin:0 0 8px;font-size:29px}p{color:#5b6d7c;margin:8px 0 18px}.controls{display:flex;gap:20px;flex-wrap:wrap;align-items:end;margin:25px 0}label{display:flex;flex-direction:column;gap:7px;font-weight:600}select,input,button{font:inherit;padding:10px 14px;border:1px solid #b9c8d4;border-radius:7px;background:white;color:#192e43}button{cursor:pointer}select{min-width:200px}.cards{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:20px}.card{padding:14px 20px;background:white;border-radius:10px;min-width:180px}.card strong{display:block;font-size:24px;margin-top:3px}.panel{background:white;border:1px solid #dae2e9;border-radius:12px;padding:22px;margin:18px 0}h2{font-size:19px;margin:0 0 6px}.legend{display:flex;gap:24px;font-size:13px;margin:12px 0}.line{display:inline-block;width:13px;height:13px;background:#637991;vertical-align:middle;margin-right:6px}.dot{display:inline-block;width:13px;height:13px;background:#008f83;vertical-align:middle;margin-right:6px}.plot{height:330px;position:relative}canvas{width:100%;height:100%;display:block;touch-action:none;cursor:crosshair}.selection{position:absolute;top:27px;bottom:48px;background:#008f8326;border-left:1px solid #008f83;border-right:1px solid #008f83;pointer-events:none;display:none}.tip{position:absolute;pointer-events:none;background:#142b40;color:white;border-radius:7px;padding:10px;white-space:pre-line;font-size:12px;display:none;z-index:2}.note{font-size:12px;color:#627482;line-height:1.6}#empty{display:none;padding:15px;background:#fff1d7;border-radius:8px}@media(max-width:600px){main{padding:14px}.panel{padding:12px}.plot{height:300px}}
-</style></head><body><main><h1>Monitoramento hidrológico</h1><p>Precipitação e nível · dados por estação</p>
-<div class="controls"><label>Estação<select id="station"></select></label><label>Variável<select id="variable"><option value="chuva">Precipitação</option><option value="nivel">Nível</option></select></label><label>Data inicial<input id="start" type="date"></label><label>Data final<input id="end" type="date"></label><button id="reset">Período completo</button><button id="undozoom">Desfazer zoom</button></div>
-<div class="cards"><div class="card">Registros brutos<strong id="total"></strong></div><div class="card"><span id="label1">Aprovados</span><strong id="approved"></strong></div><div class="card" id="card2"><span id="label2">Após persistência</span><strong id="approved2"></strong></div><div class="card">Valores ausentes<strong id="missing"></strong></div></div><div id="empty">Nenhum registro neste intervalo. Ajuste as datas.</div>
-<section class="panel"><h2 id="title">Distribuição temporal</h2><p class="note">Arraste para ampliar o intervalo nos dois gráficos. Use “Desfazer zoom” para voltar. Consulte valores com o cursor.</p><div class="legend"></div><div class="plot"><canvas id="rain" aria-label="Gráfico temporal de chuva"></canvas><div class="tip"></div><div class="selection"></div></div><p id="zero" class="note"></p></section>
-<section class="panel"><h2>Número de registros por dia</h2><p class="note">Contagem diária de registros com valor preenchido. As séries após os testes são contadas separadamente.</p><div class="legend"></div><div class="plot"><canvas id="counts" aria-label="Gráfico de registros por dia"></canvas><div class="tip"></div><div class="selection"></div></div></section>
-</main>
-
+# ---------------------------------------------------------------------
+# Parte INFORMATIVA da pagina (cabecalho, filtros, cartoes, molduras) --
+# padronizada em 29/09/2026 com as demais abas do site: usa o MESMO CSS
+# base de layout_cg (tokens de cor claro/escuro, fonte 14px, largura
+# 1280px, nav principal e sub-abas alinhadas a grade). O modo escuro
+# segue o do navegador/sistema, como nas outras paginas.
+# Os GRAFICOS (canvas, PAINEL_JS, .plot/.selection/.tip) NAO foram
+# alterados: continuam desenhando com as cores fixas originais. Por isso,
+# no modo escuro, a area de cada grafico (.plot) mantem um fundo claro
+# proprio -- sem isso os rotulos e a grade do canvas (feitos para fundo
+# branco) ficariam ilegiveis sobre o fundo escuro.
+# ---------------------------------------------------------------------
+CSS_CONSISTENCIA = """
+.nota-pagina{margin:-8px 0 14px;color:var(--ink-3);font-size:.75rem}
+.controls{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin:0 0 12px;
+  background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.controls label{display:flex;flex-direction:column;gap:4px;font-size:.78rem;font-weight:600;color:var(--ink-2)}
+.controls select,.controls input,.controls button{font:inherit;font-size:.82rem;padding:6px 10px;
+  border:1px solid var(--grid);border-radius:7px;background:var(--surface);color:var(--ink)}
+.controls input{color-scheme:inherit}
+.controls select{min-width:240px}
+.controls button{cursor:pointer;color:var(--ink-2)}
+.controls button:hover{background:var(--grid)}
+.kpis .kpi-valor{font-variant-numeric:tabular-nums}
+#empty{display:none;background:var(--aviso-bg);color:var(--aviso-ink);border-radius:8px;padding:8px 12px;font-size:.8rem;margin-bottom:12px}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin:0 0 12px;min-width:0}
+.panel h2{font-size:.95rem;margin:0}
+.note{margin:2px 0 8px;color:var(--ink-3);font-size:.75rem;line-height:1.5}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:.72rem;color:var(--ink-2);margin:4px 0 10px}
+/* ---- area dos graficos: identica a original ---- */
+.plot{height:330px;position:relative;background:#fff;border-radius:8px}
+canvas{width:100%;height:100%;display:block;touch-action:none;cursor:crosshair}
+.selection{position:absolute;top:27px;bottom:48px;background:#008f8326;border-left:1px solid #008f83;border-right:1px solid #008f83;pointer-events:none;display:none}
+.tip{position:absolute;pointer-events:none;background:#142b40;color:white;border-radius:7px;padding:10px;white-space:pre-line;font-size:12px;display:none;z-index:2}
+@media(max-width:600px){.pagina{padding:12px}.panel{padding:12px}.plot{height:300px}.controls select{min-width:0;width:100%}.controls label{flex:1 1 100%}}
 """
+
+CORPO_HTML = """<div class="pagina">
+  <div class="cabecalho">
+    <h1>__TITULO__</h1>
+    <p>__PERIODO__ · atualizado em __ATUALIZADO__</p>
+  </div>
+  <p class="nota-pagina">Precipitação e nível, por estação · aprovado = passou no teste de consistência do indicador 2.8</p>
+  <div class="controls"><label>Estação<select id="station"></select></label><label>Variável<select id="variable"><option value="chuva">Precipitação</option><option value="nivel">Nível</option></select></label><label>Data inicial<input id="start" type="date"></label><label>Data final<input id="end" type="date"></label><button id="reset">Período completo</button><button id="undozoom">Desfazer zoom</button></div>
+  <section class="kpis" aria-label="Resumo da estação">
+    <div class="kpi"><p class="kpi-rotulo">Registros brutos</p><p class="kpi-valor" id="total"></p></div>
+    <div class="kpi"><p class="kpi-rotulo" id="label1">Aprovados</p><p class="kpi-valor" id="approved"></p></div>
+    <div class="kpi" id="card2"><p class="kpi-rotulo" id="label2">Após persistência</p><p class="kpi-valor" id="approved2"></p></div>
+    <div class="kpi"><p class="kpi-rotulo">Valores ausentes</p><p class="kpi-valor" id="missing"></p></div>
+  </section>
+  <div id="empty">Nenhum registro neste intervalo. Ajuste as datas.</div>
+  <section class="panel"><h2 id="title">Distribuição temporal</h2><p class="note">Arraste para ampliar o intervalo nos dois gráficos. Use “Desfazer zoom” para voltar. Consulte valores com o cursor.</p><div class="legend"></div><div class="plot"><canvas id="rain" aria-label="Gráfico temporal de chuva"></canvas><div class="tip"></div><div class="selection"></div></div><p id="zero" class="note"></p></section>
+  <section class="panel"><h2>Número de registros por dia</h2><p class="note">Contagem diária de registros com valor preenchido. As séries após os testes são contadas separadamente.</p><div class="legend"></div><div class="plot"><canvas id="counts" aria-label="Gráfico de registros por dia"></canvas><div class="tip"></div><div class="selection"></div></div></section>
+</div>
+"""
+
+TITULO_PAGINA = "Hidrologia — Consistência por estação"
 
 PAINEL_JS = """
 const MANIFEST=JSON.parse(document.getElementById('manifesto').textContent), $=id=>document.getElementById(id), DAY=86400000;
@@ -248,6 +300,19 @@ def _nomes_estacao(dim_estacao):
     return dict(zip(d["codigo_estacao"], d["nome_estacao"].astype(str)))
 
 
+def _texto_periodo(fato_completo):
+    """"Período: dd/mm/aaaa a dd/mm/aaaa" -- da primeira a ultima leitura
+    do fato (todas as estacoes); sem dados, do inicio do CG ate hoje. E so o
+    periodo GERAL da pagina: as datas de cada estacao continuam nos campos
+    Data inicial/Data final do filtro."""
+    fmt = lambda d: pd.Timestamp(d).strftime("%d/%m/%Y")
+    if fato_completo is not None and not fato_completo.empty and "data_hora" in fato_completo.columns:
+        dh = pd.to_datetime(fato_completo["data_hora"])
+        return f"Período: {fmt(dh.min())} a {fmt(dh.max())}"
+    hoje = datetime.now(ZoneInfo("America/Sao_Paulo")).date()
+    return f"Período: {fmt(config_cg.DATA_INICIO_CG_HIDRO)} a {fmt(hoje)}"
+
+
 def gerar_pagina_consistencia(fato_completo, dim_estacao, caminho_saida):
     """Grava o HTML em caminho_saida e os .json de cada estacao numa
     pasta NOME_PASTA_DADOS ao lado dele (mesma pasta de caminho_saida).
@@ -272,18 +337,21 @@ def gerar_pagina_consistencia(fato_completo, dim_estacao, caminho_saida):
         "pasta_dados": NOME_PASTA_DADOS + "/",
         "nomes": _nomes_estacao(dim_estacao),
     }
-    cabecalho = (CABECALHO_HTML
-                .replace("<title>Monitoramento hidrológico</title>",
-                         "<title>Hidrologia — Consistência por estação</title>")
-                .replace("<h1>Monitoramento hidrológico</h1><p>Precipitação e nível · dados por estação</p>",
-                         "<h1>Hidrologia — Consistência por estação</h1>"
-                         "<p>Precipitação e nível, por estação, desde 01/07/2026 · "
-                         "aprovado = passou no teste de consistência do indicador 2.8</p>"))
-    html = (cabecalho
-           + '<script id="manifesto" type="application/json">'
-           + json.dumps(manifesto, separators=(",", ":"))
-           + "</script>"
-           + f"<script>{PAINEL_JS}</script></body></html>")
+    corpo = (CORPO_HTML
+             .replace("__TITULO__", _html.escape(TITULO_PAGINA))
+             .replace("__PERIODO__", _html.escape(_texto_periodo(fato_completo)))
+             .replace("__ATUALIZADO__", datetime.now(ZoneInfo("America/Sao_Paulo")).strftime("%d/%m/%Y às %H:%M")))
+    html = ('<!doctype html>\n<html lang="pt-br">\n<head>\n<meta charset="utf-8">\n'
+            '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+            '<meta name="color-scheme" content="light dark">\n'
+            f"<title>{_html.escape(TITULO_PAGINA)}</title>\n"
+            f"<style>{layout_cg.CSS}{CSS_CONSISTENCIA}</style>\n"
+            "</head>\n<body>\n"
+            + corpo
+            + '<script id="manifesto" type="application/json">'
+            + json.dumps(manifesto, separators=(",", ":"))
+            + "</script>"
+            + f"<script>{PAINEL_JS}</script>\n</body>\n</html>\n")
 
     with open(caminho_saida, "w", encoding="utf-8") as f:
         f.write(html)

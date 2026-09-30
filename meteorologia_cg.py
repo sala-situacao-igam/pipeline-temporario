@@ -210,7 +210,7 @@ def _dados_pagina(titulo, inicio, fim, r41, r42, r43, cd41, cd42, cd43, texto_4_
     return {
         "titulo": titulo,
         "periodo": f"Período: {_fmt_data(inicio)} a {_fmt_data(fim)}",
-        "atualizado_em": _fmt_data(_hoje()),
+        "atualizado_em": datetime.now(FUSO_BRASIL).strftime("%d/%m/%Y às %H:%M"),
         "avisos": avisos,
         "kpis": [
             {"id": "41", "rotulo": "4.1 Previsões do tempo", "nota": cd41["pontuacao"],
@@ -238,6 +238,14 @@ def _dados_pagina(titulo, inicio, fim, r41, r42, r43, cd41, cd42, cd43, texto_4_
             "resumo": f"<strong>{cd43['boletins_publicados']}</strong> boletins de "
                       f"<strong>{cd43['meses_esperados']}</strong> meses esperados · "
                       f"{pct(cd43['percentual'])} → nota {cd43['pontuacao']}/10",
+        },
+        # Totais usados só pelos gráficos do relatório (gerar_relatorios_visuais.py) -- o layout ignora.
+        "totais": {
+            "4_1": {"publicadas": cd41["previsoes_publicadas"],
+                    "esperadas": cd41.get("esperadas", cd41.get("dias_uteis"))},
+            "4_2": {"relatorios": cd42["relatorios_emitidos"], "alertas": r42["total_alertas_individuais"],
+                    "dias_no_periodo": cd42["dias_no_periodo"]},
+            "4_3": {"publicados": cd43["boletins_publicados"], "esperados": cd43["meses_esperados"]},
         },
     }
 
@@ -268,8 +276,10 @@ def gerar_meteo_2026(caminho_saida, data_fim=None, devolver_resultados=False):
     return resumo
 
 
-def gerar_meteo_cg(caminho_saida, data_fim=None):
-    """Visão Contrato de Gestão -- regras de 27/09 (ver docstring do módulo)."""
+def gerar_meteo_cg(caminho_saida, data_fim=None, devolver_dados=False):
+    """Visão Contrato de Gestão -- regras de 27/09 (ver docstring do módulo).
+    `devolver_dados=True` (29/09/2026) devolve (resumo, dados), para os
+    gráficos do relatório (gerar_relatorios_visuais.py)."""
     inicio, fim = config_cg.DATA_INICIO_CG_METEO, data_fim or _hoje()
     avisos = []
     r41 = contar_4_1_multiano(inicio, fim, avisos)
@@ -282,4 +292,5 @@ def gerar_meteo_cg(caminho_saida, data_fim=None):
                           cd41, cd42, cd43, texto, [a[0].upper() + a[1:] for a in avisos])
     layout_cg.gerar_pagina_meteo(dados, caminho_saida)
     _finalizar(caminho_saida, "cg")
-    return {k["id"]: f"{k['percentual']}% -> nota {k['nota']}" for k in dados["kpis"]} | {"avisos": avisos}
+    resumo = {k["id"]: f"{k['percentual']}% -> nota {k['nota']}" for k in dados["kpis"]} | {"avisos": avisos}
+    return (resumo, dados) if devolver_dados else resumo

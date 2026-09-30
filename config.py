@@ -14,7 +14,7 @@ Funções: nenhuma (apenas constantes).
 
 PASTA_DATA_ID = "1RKiSuOL8-4zuJGDpFnSA4YG-iWgAi4D1"
 PASTA_ESTACOES_ID = "19h0NtwSYnX8KBgug4Mwkr7-8TnZHL7rL"
-PASTA_RELATORIOS_ID = "1VA8cMwIxuWRt87jbXdKM_7mIxzm5Z_rn"
+PASTA_RELATORIOS_ID = "1VA8cMwIxuWRt87jbXdKM_7mIxzm5Z_rn"  # NAO trocar: aqui ficam fato_disponibilidade, dim_estacao, resumos do 2.8 etc.
 PASTA_ESTACOES_FLAGS_ID = "15Rie6x1JG8j-0Ye67mxLYmMDr3kO2sjo"
 
 # Pastas de saida dos indicadores 4.x (SIMGE) -- adicionadas em 31/08.
@@ -23,7 +23,7 @@ PASTA_MONITORAMENTO_CLIMATICO_ID = "1qlIrmrxbr7f9kyAU1bCMNubuN6WMXZ_c"  # indica
 PASTA_ALERTAS_METEOROLOGICOS_ID = "1VZF9AcAJcblwKO3-_0dXkT-hTFeS0ekc"  # indicador 4.2
 
 # Pasta unica pra guardar os graficos/paginas gerados (PNGs do indicador 2.2 e os HTML do site: index.html/meteorologia.html)
-PASTA_GRAFICOS_ID = "1DCHsoCOxF1XMVex9A3zYC5s9MUJkFm1c"
+PASTA_GRAFICOS_ID = "1C6k6gsoKquJ41VfTM-Ae5t8hzBTsxCan"
 
 # Pasta com os estacao_detalhada_XXXXXXXX.csv da API nova (HidroWebService,
 # rota Detalhada) -- indicador 2.1. Grao leitura x estacao, alimentada pela
