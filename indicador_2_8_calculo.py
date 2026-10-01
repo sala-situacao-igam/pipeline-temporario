@@ -107,11 +107,28 @@ def preparar_dim(dim_estacao):
     return dim
 
 
+ALIASES_COD_MIN_MAX = ["cod_estacao", "codigo_estacao", "codigo_frente1_proposto", "cod_estacao_planilha"]
+
+
+def _numero_br(serie):
+    """Aceita 110 / 110.5 / 110,5 / 1.200,5 (Excel em português)."""
+    txt = serie.astype(str).str.strip()
+    tem_virgula = txt.str.contains(",", regex=False)
+    txt = txt.where(~tem_virgula, txt.str.replace(".", "", regex=False).str.replace(",", ".", regex=False))
+    return pd.to_numeric(txt, errors="coerce")
+
+
 def carregar_valores_min_max(servico):
-    """Drive (PASTA_DATA_ID) -> arquivo local -> vazio (Range só por z-score)."""
+    """Drive (PASTA_DATA_ID) -> arquivo local -> vazio (Range só por z-score).
+    30/09/2026: aceita separador ',' ou ';' (Excel em português salva com ';'),
+    decimal com vírgula e BOM; se as colunas não baterem, avisa e segue só com
+    o z-score em vez de derrubar a Fase 4."""
+    vazio = pd.DataFrame(columns=["cod_estacao", "minimo", "maximo"])
     df = None
     try:
         df = drive_io.ler_csv(servico, NOME_MIN_MAX, config.PASTA_DATA_ID)
+        if df is not None and len(df.columns) == 1 and ";" in str(df.columns[0]):
+            df = drive_io.ler_csv(servico, NOME_MIN_MAX, config.PASTA_DATA_ID, sep=";")
     except Exception as erro:  # noqa: BLE001
         print(f"  AVISO: erro ao ler {NOME_MIN_MAX} do Drive ({erro}).")
     if df is None and os.path.exists(NOME_MIN_MAX):
@@ -119,8 +136,24 @@ def carregar_valores_min_max(servico):
         print(f"  {NOME_MIN_MAX} lido da pasta local.")
     if df is None:
         print(f"  AVISO: {NOME_MIN_MAX} não encontrado -- Range só por z-score nesta rodada.")
-        return pd.DataFrame(columns=["cod_estacao", "minimo", "maximo"])
-    df["cod_estacao"] = df["cod_estacao"].astype(str).str.strip()
+        return vazio
+
+    df.columns = [str(c).replace("\ufeff", "").strip().lower() for c in df.columns]
+    df = df.rename(columns={"min": "minimo", "max": "maximo", "mínimo": "minimo", "máximo": "maximo"})
+    col_cod = next((c for c in ALIASES_COD_MIN_MAX if c in df.columns), None)
+    if col_cod is None or "minimo" not in df.columns or "maximo" not in df.columns:
+        print(f"  AVISO: {NOME_MIN_MAX} sem as colunas esperadas (cod_estacao, minimo, maximo). "
+              f"Colunas encontradas: {list(df.columns)} -- Range só por z-score nesta rodada.")
+        return vazio
+
+    df = df.rename(columns={col_cod: "cod_estacao"})[["cod_estacao", "minimo", "maximo"]]
+    df["cod_estacao"] = (df["cod_estacao"].astype(str).str.strip()
+                         .str.replace(r"\.0$", "", regex=True).str.zfill(8))
+    df["minimo"] = _numero_br(df["minimo"])
+    df["maximo"] = _numero_br(df["maximo"])
+    df = df[df["cod_estacao"].str.fullmatch(r"\d{8}") & df["minimo"].notna() & df["maximo"].notna()]
+    print(f"  {NOME_MIN_MAX}: {len(df)} estações com mínimo/máximo "
+          f"(mínimo de {df['minimo'].min()} a {df['minimo'].max()}; máximo de {df['maximo'].min()} a {df['maximo'].max()}).")
     return df
 
 
@@ -364,7 +397,7 @@ def resumir(tabela_final, data_execucao, data_fim, sem_dado, merge_ok):
     if fim_merge:
         resumo.loc[resumo["medida"] == "merge", "periodo_fim"] = fim_merge
     resumo["merge_status"] = "ok" if merge_ok else "indisponível"
-    resumo["estacoes_sem_dado"] = ";".join(sorted(sem_dado))
+    resumo["estacoes_sem_dado"] = " | ".join(sorted(sem_dado))
 
     por_estacao = []
     for codigo, grupo in tabela_final.groupby("codigo_estacao"):

@@ -258,7 +258,7 @@ def gerar_hidro_cg(fato_disponibilidade, dim_estacao, df_pacotes, resumo_2_8, ca
     dados = {
         "titulo": "Hidrologia — Contrato de Gestão",
         "periodo": f"Período: {_fmt(config_cg.DATA_INICIO_CG_HIDRO)} a {_fmt(data_fim)}",
-        "atualizado_em": _fmt(_hoje()), "avisos": avisos,
+        "atualizado_em": datetime.now(FUSO_BRASIL).strftime("%d/%m/%Y às %H:%M"), "avisos": avisos,
         "kpis": ([kpi_21] if kpi_21 else []) + kpis_22 + kpis_28,
         "ind_2_1": ind_2_1 or _cartao_2_1_vazio(), "ind_2_2": ind_2_2,
         "ind_2_8": ind_2_8, "merge": merge,

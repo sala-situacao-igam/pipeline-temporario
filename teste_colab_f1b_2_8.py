@@ -64,7 +64,7 @@ def main():
     print("\n" + "=" * 60 + "\nRESUMO DO 2.8 (soma da rede)\n" + "=" * 60)
     colunas = ["rotulo", "aprovados", "avaliados", "percentual", "nota", "n_estacoes"]
     print(r["resumo_2_8"][colunas].to_string(index=False))
-    print(f"CHIRPS: {r['resumo_2_8']['chirps_status'].iloc[0]}")
+    #print(f"CHIRPS: {r['resumo_2_8']['chirps_status'].iloc[0]}")
     print(f"Estações sem leitura no período: {r['resumo_2_8']['estacoes_sem_dado'].iloc[0] or '(nenhuma)'}")
 
     conferir_com_rodada_anterior(r["tabela_2_8"])
